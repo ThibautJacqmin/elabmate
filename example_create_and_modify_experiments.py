@@ -12,7 +12,7 @@ from ElabClient import ElabClient
 
 # Step 1: Initialize the API client (uses env vars API_KEY, API_HOST_URL)
 path_to_conf_file = ''
-client = ElabClient("path_to_conf_file/elab_server.conf")
+client = ElabClient(path_to_conf_file + '/elab_server.conf')
 
 # Step 2: Create a new experiment
 exp = client.create_experiment(title='Random experiment') # First time you run the code
