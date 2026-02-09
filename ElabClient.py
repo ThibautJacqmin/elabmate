@@ -10,7 +10,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 import elabapi_python as ep
 from functools import wraps
-from Experiment import Experiment
+from ElabExperiment import ElabExperiment
 from Exceptions import InvalidTemplate, InvalidTitle, InvalidID, DuplicateTitle
 
 class ElabClient:
@@ -42,7 +42,7 @@ class ElabClient:
                 raise InvalidTitle(title)                
         if ID is not None:
             if self._has_ID(ID):
-                experiment = Experiment(self, ID=ID)
+                experiment = ElabExperiment(self, ID=ID)
                 experiment._load()
                 return experiment
             else: 
@@ -56,7 +56,7 @@ class ElabClient:
                 raise DuplicateTitle(title)
             headers = func(self, title=title, category=category, **kwargs)
             ID = int(headers['Location'].split("/")[-1])
-            experiment = Experiment(self, ID)
+            experiment = ElabExperiment(self, ID)
             experiment._load()
             experiment.title = title
             if category is not None:

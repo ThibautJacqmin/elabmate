@@ -28,7 +28,7 @@ except ModuleNotFoundError:  # pragma: no cover - labmate optional during tests
             """Compatibility no-op."""
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from Experiment import Experiment
+    from ElabExperiment import ElabExperiment
     from labmate.acquisition.acquisition_data import NotebookAcquisitionData
 
 
@@ -36,7 +36,7 @@ PayloadBuilder = Callable[
     ["NotebookAcquisitionData", Tuple[str, ...], Optional[Mapping[str, Any]]],
     Dict[str, Any],
 ]
-ExperimentResolver = Callable[["NotebookAcquisitionData", Dict[str, Any]], Optional["Experiment"]]
+ExperimentResolver = Callable[["NotebookAcquisitionData", Dict[str, Any]], Optional["ElabExperiment"]]
 
 
 class ElabBridge(AcquisitionBackend):
@@ -52,8 +52,8 @@ class ElabBridge(AcquisitionBackend):
         self._client = client
         self._payload_builder = payload_builder or self._default_payload_builder
         self._experiment_resolver = experiment_resolver
-        self._experiment_cache: Dict[int, tuple[Any, "Experiment"]] = {}
-        self._experiment_cache_by_identifier: Dict[str, "Experiment"] = {}
+        self._experiment_cache: Dict[int, tuple[Any, "ElabExperiment"]] = {}
+        self._experiment_cache_by_identifier: Dict[str, "ElabExperiment"] = {}
 
     def save_experiment(
         self,
@@ -61,8 +61,8 @@ class ElabBridge(AcquisitionBackend):
         *,
         attachments: Iterable[os.PathLike[str] | str] = (),
         metadata: Optional[Mapping[str, Any]] = None,
-        experiment: Optional["Experiment"] = None,
-    ) -> "Experiment":
+        experiment: Optional["ElabExperiment"] = None,
+    ) -> "ElabExperiment":
         attachment_paths = tuple(os.fspath(path) for path in attachments)
         payload = self._payload_builder(acquisition, attachment_paths, metadata)
         identifier = self._resolve_experiment_identifier(acquisition, payload)
@@ -93,8 +93,8 @@ class ElabBridge(AcquisitionBackend):
         self,
         acquisition: "NotebookAcquisitionData",
         payload: Dict[str, Any],
-        experiment: Optional["Experiment"],
-    ) -> "Experiment":
+        experiment: Optional["ElabExperiment"],
+    ) -> "ElabExperiment":
         if experiment is not None:
             return experiment
 
@@ -164,7 +164,11 @@ class ElabBridge(AcquisitionBackend):
                 experiment.add_comment(comment)
 
         for path in attachments:
-            experiment.add_file(path)
+            # Avoid duplicates on rerun: skip if identical, otherwise replace.
+            if hasattr(experiment, "upsert_file"):
+                experiment.upsert_file(path)
+            else:
+                experiment.add_file(path)
 
 
     def save_snapshot(self, acquisition: "NotebookAcquisitionData") -> None:
@@ -235,7 +239,7 @@ class ElabBridge(AcquisitionBackend):
 
     def _get_cached_experiment(
         self, acquisition: "NotebookAcquisitionData"
-    ) -> Optional["Experiment"]:
+    ) -> Optional["ElabExperiment"]:
         cached = getattr(acquisition, "_labmate_elabftw_experiment", None)
         if cached is not None:
             return cached
@@ -258,7 +262,7 @@ class ElabBridge(AcquisitionBackend):
     def _store_cached_experiment(
         self,
         acquisition: "NotebookAcquisitionData",
-        experiment: "Experiment",
+        experiment: "ElabExperiment",
     ) -> None:
         identifier = self._resolve_experiment_identifier(acquisition)
         if identifier is not None:
