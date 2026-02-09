@@ -8,10 +8,9 @@ Created on Wed Apr 16 15:29:35 2025
 
 from __future__ import annotations
 
-import os
-from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from collections.abc import Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 from Exceptions import DuplicateTitle
 
@@ -59,11 +58,11 @@ class ElabBridge(AcquisitionBackend):
         self,
         acquisition: "NotebookAcquisitionData",
         *,
-        attachments: Iterable[os.PathLike[str] | str] = (),
+        attachments: Iterable[Union[str, Path]] = (),
         metadata: Optional[Mapping[str, Any]] = None,
         experiment: Optional["ElabExperiment"] = None,
     ) -> "ElabExperiment":
-        attachment_paths = tuple(os.fspath(path) for path in attachments)
+        attachment_paths = tuple(str(Path(path)) for path in attachments)
         payload = self._payload_builder(acquisition, attachment_paths, metadata)
         identifier = self._resolve_experiment_identifier(acquisition, payload)
         if identifier:
@@ -220,7 +219,7 @@ class ElabBridge(AcquisitionBackend):
                     for candidate in candidates:
                         try:
                             if candidate.is_file():
-                                candidate_key = os.fspath(candidate)
+                                candidate_key = str(candidate)
                                 figure_attachments.setdefault(candidate_key, candidate)
                         except OSError:
                             continue
