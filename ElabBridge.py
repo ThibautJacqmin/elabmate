@@ -316,15 +316,18 @@ class ElabBridge(AcquisitionBackend):
         # Load experiment (adapt to your client API)
         exp = self._client.load_experiment(title=exp_title)
 
-        # Find matching attachment on elabftw
-        # (adapt: exp.list_files(), exp.files, exp.attachments, etc.)
-        files = exp.list_files()  # must return iterable of metadata dicts or objects
+        # Find matching attachment metadata.
         match = None
-        for f in files:
-            fname = f["name"] if isinstance(f, dict) else getattr(f, "name", None)
-            if fname == attachment_name:
-                match = f
-                break
+        if hasattr(exp, "get_file"):
+            match = exp.get_file(attachment_name)
+        elif hasattr(exp, "list_files"):
+            files = exp.list_files()
+            for f in files:
+                fname = f["name"] if isinstance(f, dict) else getattr(f, "name", None)
+                real_name = f.get("real_name") if isinstance(f, dict) else getattr(f, "real_name", None)
+                if attachment_name in {fname, real_name}:
+                    match = f
+                    break
 
         if match is None:
             return False
@@ -332,10 +335,9 @@ class ElabBridge(AcquisitionBackend):
         # Download into the exact requested path
         local_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Adapt to your download API:
-        # - maybe exp.download_file(file_id, destination)
-        # - or self._client.download_attachment(...)
         file_id = match["id"] if isinstance(match, dict) else getattr(match, "id", None)
+        if file_id is None:
+            return False
         exp.download_file(file_id=file_id, destination=local_path)
 
         return local_path.exists()
