@@ -300,6 +300,82 @@ class ElabBridge(AcquisitionBackend):
     def load_snapshot(self, acquisition: "NotebookAcquisitionData") -> None:
         # The integration currently does not support loading snapshots.
         return None
+    
+    def ensure_local_file(self, filepath: str) -> bool:
+        """
+        Labmate hook:
+        Called when a required file does not exist locally.
+
+        The backend can try to fetch it from a remote storage (ElabFTW here).
+
+        Expected behavior:
+        - Return True if the file was fetched/created.
+        - Return False otherwise.
+        """
+        target = Path(filepath)
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        # We assume filename is "<experiment_title>.h5"
+        experiment_title = target.stem
+
+        if self._client is None:
+            return False
+
+        # The client must provide:
+        # - load_experiment(title=...)
+        # and the experiment must provide:
+        # - get_files()
+        # - (upload object).id / .real_name / .created_at
+        # And the client must provide:
+        # - uploads.download_upload("experiments", exp.ID, upload_id)
+
+        load_experiment = getattr(self._client, "load_experiment", None)
+        if load_experiment is None:
+            return False
+
+        try:
+            experiment = load_experiment(title=experiment_title)
+        except Exception:
+            return False
+
+        get_files = getattr(experiment, "get_files", None)
+        if get_files is None:
+            return False
+
+        uploads = get_files()
+        h5_uploads = [
+            u for u in uploads
+            if getattr(u, "real_name", "").endswith(".h5")
+        ]
+        if not h5_uploads:
+            return False
+
+        # Take most recent upload
+        h5_uploads.sort(
+            key=lambda u: getattr(u, "created_at", ""),
+            reverse=True,
+        )
+        upload = h5_uploads[0]
+
+        uploads_api = getattr(self._client, "uploads", None)
+        if uploads_api is None:
+            return False
+
+        download_upload = getattr(uploads_api, "download_upload", None)
+        if download_upload is None:
+            return False
+
+        try:
+            content = self._client.download_upload("experiments", experiment.ID, upload.id)
+        except Exception:
+            return False
+
+        # Atomic write
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        tmp.write_bytes(content)
+        tmp.replace(target)
+
+        return True
 
 
 __all__ = ["ElabBridge"]

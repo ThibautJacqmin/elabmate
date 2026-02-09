@@ -12,6 +12,7 @@ import elabapi_python as ep
 from functools import wraps
 from ElabExperiment import ElabExperiment
 from Exceptions import InvalidTemplate, InvalidTitle, InvalidID, DuplicateTitle
+from typing import Union
 
 class ElabClient:
     def __init__(self, config_path: str = "elab_server.conf"):
@@ -31,6 +32,37 @@ class ElabClient:
         self.statuses = ep.ExperimentsStatusApi(self.api_client)
         self.templates = ep.ExperimentsTemplatesApi(self.api_client)
         self.tags = ep.TagsApi(self.api_client)
+        
+    def download_upload(
+        self,
+        entity_type: str,
+        entity_id: int,
+        upload_id: int,
+    ) -> bytes:
+        """
+        Download raw bytes of an upload from eLabFTW.
+
+        Uses UploadsApi.read_upload(..., format="binary", _preload_content=False)
+        as recommended by the API v2 documentation. :contentReference[oaicite:1]{index=1}
+        """
+        # Important: _preload_content=False to get a raw HTTP response object
+        resp = self.uploads.read_upload(
+            entity_type,
+            entity_id,
+            upload_id,
+            format="binary",
+            _preload_content=False,
+        )
+
+        # Depending on swagger/openapi generator, resp can be:
+        # - urllib3.HTTPResponse (has .data)
+        # - a file-like object (has .read())
+        if hasattr(resp, "data"):
+            return resp.data  # type: ignore[attr-defined]
+        if hasattr(resp, "read"):
+            return resp.read()  # type: ignore[no-any-return]
+        # fallback: try bytes() (rare)
+        return bytes(resp)
                        
     
     def load_experiment(self, ID: int=None, title: str=None):
