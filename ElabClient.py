@@ -12,8 +12,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import elabapi_python as ep
 from functools import wraps
 from ElabExperiment import ElabExperiment
-from Exceptions import InvalidTemplate, InvalidTitle, InvalidID, DuplicateTitle
-from typing import Union
+from Exceptions import InvalidTemplate, InvalidTitle, InvalidID, DuplicateTitle, InvalidCategory
+from typing import Optional, Union
 
 class ElabClient:
     def __init__(self, config_path: str = "elab_server.conf"):
@@ -69,39 +69,47 @@ class ElabClient:
     
     def load_experiment(self, ID: int=None, title: str=None):
         # Loads Experiment object from ID or title
-        if title is not None: 
-            if self._has_title(title):
-                ID = self.experiments_dict[title]
-            else:
-                raise InvalidTitle(title)                
+        experiments_map = self.experiments_dict
+        if title is not None:
+            resolved = experiments_map.get(title)
+            if resolved is None:
+                raise InvalidTitle(title)
+            ID = resolved
         if ID is not None:
-            if self._has_ID(ID):
-                experiment = ElabExperiment(self, ID=ID)
-                experiment._load()
-                return experiment
-            else: 
-                raise InvalidID(ID)  
-  
+            if ID in experiments_map.values():
+                return ElabExperiment(self, ID=ID)
+            raise InvalidID(ID)
 
+    def _resolve_category_id(self, category: Union[int, str]) -> int:
+        categories = self.category_dict
+        if isinstance(category, int):
+            if category in categories.values():
+                return category
+            raise InvalidCategory(str(category))
+        resolved = categories.get(category)
+        if resolved is None:
+            raise InvalidCategory(category)
+        return int(resolved)
+  
     def experiment_creation_wrapper(func):
         @wraps(func)
         def wrapper(self, title: str, category: Union[int, str] = None, **kwargs):
             if self._has_title(title) and self.enforce_unique_titles:
                 raise DuplicateTitle(title)
+            category_id: Optional[int] = None
             if category is not None:
-                categories = self.category_dict
-                if isinstance(category, int):
-                    if category not in categories.values():
-                        raise InvalidCategory(str(category))
-                elif category not in categories:
-                    raise InvalidCategory(category)
+                category_id = self._resolve_category_id(category)
             headers = func(self, title=title, category=category, **kwargs)
             ID = int(headers['Location'].split("/")[-1])
             experiment = ElabExperiment(self, ID)
-            experiment._load()
-            experiment.title = title
-            if category is not None:
-                experiment.category = category
+            updates = {}
+            # Template creation doesn't take title in POST body, so patch it once here.
+            if "template_name" in kwargs:
+                updates["title"] = title
+            if category_id is not None:
+                updates["category"] = category_id
+            if updates:
+                experiment._sync(updates)
             return experiment
         return wrapper
 
@@ -172,7 +180,7 @@ class ElabClient:
         self._team_id = int(team_id)
         return self._team_id
     
-    def _get_template_id(self, name: str) -> int:
+    def _get_template_id(self, name: str) -> Optional[int]:
         templates = self.templates.read_experiments_templates()
         for t in templates:
             if t.title == name:
@@ -183,7 +191,7 @@ class ElabClient:
         # Checks if title already exists
         return title in self.experiments_dict
      
-    def _has_ID(self, ID: str) -> bool:
+    def _has_ID(self, ID: int) -> bool:
         # Checks if ID already exists
         return ID in self.experiments_dict.values()
     
