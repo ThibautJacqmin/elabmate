@@ -37,6 +37,31 @@ class ElabExperiment:
     def add_file(self, file_path: str, comment: str = "Uploaded via API"):
         self.api.uploads.post_upload("experiments", self.ID, file=file_path, comment=comment)
         self._load()
+
+    def upload_file(
+        self,
+        file_path: str,
+        comment: str = "Uploaded via API",
+        *,
+        replace_if_exists: bool = True,
+        use_hash: bool = True,
+        use_filesize_fallback: bool = False,
+    ) -> None:
+        """
+        Unified user-facing upload method.
+
+        Default behavior is idempotent: create if missing, replace if existing,
+        and avoid transfer when content is unchanged.
+        """
+        if replace_if_exists:
+            self.upsert_file(
+                file_path=file_path,
+                comment=comment,
+                use_hash=use_hash,
+                use_filesize_fallback=use_filesize_fallback,
+            )
+            return
+        self.add_file(file_path=file_path, comment=comment)
         
     @staticmethod
     def _sha256_file(path: str, chunk_size: int = 1024 * 1024) -> str:

@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from collections.abc import Callable, Iterable, Mapping
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
+import time
 
 from Exceptions import DuplicateTitle
 
@@ -53,6 +54,7 @@ class ElabBridge(AcquisitionBackend):
         self._experiment_resolver = experiment_resolver
         self._experiment_cache: Dict[int, tuple[Any, "ElabExperiment"]] = {}
         self._experiment_cache_by_identifier: Dict[str, "ElabExperiment"] = {}
+        self._last_acquisition: Any = None
 
     def save_experiment(
         self,
@@ -62,6 +64,7 @@ class ElabBridge(AcquisitionBackend):
         metadata: Optional[Mapping[str, Any]] = None,
         experiment: Optional["ElabExperiment"] = None,
     ) -> "ElabExperiment":
+        self._last_acquisition = acquisition
         attachment_paths = tuple(str(Path(path)) for path in attachments)
         payload = self._payload_builder(acquisition, attachment_paths, metadata)
         identifier = self._resolve_experiment_identifier(acquisition, payload)
@@ -73,6 +76,103 @@ class ElabBridge(AcquisitionBackend):
         experiment = self._ensure_experiment(acquisition, payload, experiment)
         self._update_remote_experiment(experiment, payload, attachment_paths)
         return experiment
+
+    def get_experiment(
+        self,
+        acquisition: Optional[Any] = None,
+        *,
+        wait: float = 0.1,
+        poll_interval: float = 0.1,
+    ) -> Optional["ElabExperiment"]:
+        """
+        Return the ElabExperiment linked to acquisition or analysis context.
+
+        Notes:
+        - `save_snapshot` runs asynchronously in Labmate. Right after `save_acquisition`,
+          the experiment might not yet be attached to the acquisition object.
+        - Set `wait` (seconds) to poll until the experiment becomes available.
+        - If `acquisition` is None, use the most recently seen acquisition.
+        - `acquisition` can be one of:
+          - NotebookAcquisitionData
+          - AcquisitionAnalysisManager (aqm)
+          - AnalysisData (aqm.data / aqm.current_analysis)
+        """
+        source = acquisition
+        acq = self._resolve_acquisition_source(source)
+        if acq is not None:
+            deadline = time.time() + max(wait, 0.0)
+            while True:
+                cached = self._get_cached_experiment(acq)
+                if cached is not None:
+                    return cached
+
+                identifier = self._resolve_experiment_identifier(acq)
+                if identifier:
+                    loaded = self._load_experiment_by_title(identifier)
+                    if loaded is not None:
+                        self._store_cached_experiment(acq, loaded)
+                        return loaded
+
+                if time.time() >= deadline:
+                    return None
+                time.sleep(max(poll_interval, 0.01))
+
+        analysis_data = self._resolve_analysis_source(source)
+        if analysis_data is None:
+            return None
+        filepath = getattr(analysis_data, "filepath", None)
+        if not filepath:
+            return None
+        title = Path(filepath).parent.name
+        return self._load_experiment_by_title(title)
+
+    def get_experiment_from_analysis(self, analysis_data: Any) -> Optional["ElabExperiment"]:
+        """
+        Resolve experiment from analysis data by inferring title from parent folder name.
+        Useful when `aqm.current_acquisition` is None (old-data analysis mode).
+        """
+        return self.get_experiment(analysis_data, wait=0.0)
+
+    def _load_experiment_by_title(self, title: str) -> Optional["ElabExperiment"]:
+        if self._client is None:
+            return None
+        load_experiment = getattr(self._client, "load_experiment", None)
+        if load_experiment is None:
+            return None
+        try:
+            return load_experiment(title=title)
+        except Exception:
+            return None
+
+    def _resolve_acquisition_source(self, source: Any) -> Optional["NotebookAcquisitionData"]:
+        if source is None:
+            return self._last_acquisition
+        if hasattr(source, "experiment_name") and hasattr(source, "filepath"):
+            return source
+        for attr in ("current_acquisition", "aq"):
+            try:
+                candidate = getattr(source, attr)
+            except Exception:
+                candidate = None
+            if candidate is not None and hasattr(candidate, "experiment_name") and hasattr(
+                candidate, "filepath"
+            ):
+                return candidate
+        return None
+
+    def _resolve_analysis_source(self, source: Any) -> Optional[Any]:
+        if source is None:
+            return None
+        if hasattr(source, "filepath") and not hasattr(source, "experiment_name"):
+            return source
+        for attr in ("current_analysis", "data", "d"):
+            try:
+                candidate = getattr(source, attr)
+            except Exception:
+                candidate = None
+            if candidate is not None and hasattr(candidate, "filepath"):
+                return candidate
+        return None
 
     def _default_payload_builder(
         self,
@@ -164,13 +264,16 @@ class ElabBridge(AcquisitionBackend):
 
         for path in attachments:
             # Avoid duplicates on rerun: skip if identical, otherwise replace.
-            if hasattr(experiment, "upsert_file"):
+            if hasattr(experiment, "upload_file"):
+                experiment.upload_file(path)
+            elif hasattr(experiment, "upsert_file"):
                 experiment.upsert_file(path)
             else:
                 experiment.add_file(path)
 
 
     def save_snapshot(self, acquisition: "NotebookAcquisitionData") -> None:
+        self._last_acquisition = acquisition
         attachments: Tuple[Path, ...] = ()
         filepath = getattr(acquisition, "filepath", None)
         if filepath:
@@ -263,6 +366,7 @@ class ElabBridge(AcquisitionBackend):
         acquisition: "NotebookAcquisitionData",
         experiment: "ElabExperiment",
     ) -> None:
+        self._last_acquisition = acquisition
         identifier = self._resolve_experiment_identifier(acquisition)
         if identifier is not None:
             self._experiment_cache_by_identifier[identifier] = experiment
