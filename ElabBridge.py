@@ -301,81 +301,45 @@ class ElabBridge(AcquisitionBackend):
         # The integration currently does not support loading snapshots.
         return None
     
-    def ensure_local_file(self, filepath: str) -> bool:
-        """
-        Labmate hook:
-        Called when a required file does not exist locally.
+    def ensure_local_file(self, local_path: str | Path) -> bool:
+        local_path = Path(local_path)
 
-        The backend can try to fetch it from a remote storage (ElabFTW here).
+        # Already present
+        if local_path.exists():
+            return True
 
-        Expected behavior:
-        - Return True if the file was fetched/created.
-        - Return False otherwise.
-        """
-        target = Path(filepath)
-        target.parent.mkdir(parents=True, exist_ok=True)
+        # Heuristic: infer experiment title from folder name (Experience 05)
+        # and requested attachment name from the filename.
+        exp_title = local_path.parent.name
+        attachment_name = local_path.name
 
-        # We assume filename is "<experiment_title>.h5"
-        experiment_title = target.stem
+        # Load experiment (adapt to your client API)
+        exp = self._client.load_experiment(title=exp_title)
 
-        if self._client is None:
+        # Find matching attachment on elabftw
+        # (adapt: exp.list_files(), exp.files, exp.attachments, etc.)
+        files = exp.list_files()  # must return iterable of metadata dicts or objects
+        match = None
+        for f in files:
+            fname = f["name"] if isinstance(f, dict) else getattr(f, "name", None)
+            if fname == attachment_name:
+                match = f
+                break
+
+        if match is None:
             return False
 
-        # The client must provide:
-        # - load_experiment(title=...)
-        # and the experiment must provide:
-        # - get_files()
-        # - (upload object).id / .real_name / .created_at
-        # And the client must provide:
-        # - uploads.download_upload("experiments", exp.ID, upload_id)
+        # Download into the exact requested path
+        local_path.parent.mkdir(parents=True, exist_ok=True)
 
-        load_experiment = getattr(self._client, "load_experiment", None)
-        if load_experiment is None:
-            return False
+        # Adapt to your download API:
+        # - maybe exp.download_file(file_id, destination)
+        # - or self._client.download_attachment(...)
+        file_id = match["id"] if isinstance(match, dict) else getattr(match, "id", None)
+        exp.download_file(file_id=file_id, destination=local_path)
 
-        try:
-            experiment = load_experiment(title=experiment_title)
-        except Exception:
-            return False
+        return local_path.exists()
 
-        get_files = getattr(experiment, "get_files", None)
-        if get_files is None:
-            return False
-
-        uploads = get_files()
-        h5_uploads = [
-            u for u in uploads
-            if getattr(u, "real_name", "").endswith(".h5")
-        ]
-        if not h5_uploads:
-            return False
-
-        # Take most recent upload
-        h5_uploads.sort(
-            key=lambda u: getattr(u, "created_at", ""),
-            reverse=True,
-        )
-        upload = h5_uploads[0]
-
-        uploads_api = getattr(self._client, "uploads", None)
-        if uploads_api is None:
-            return False
-
-        download_upload = getattr(uploads_api, "download_upload", None)
-        if download_upload is None:
-            return False
-
-        try:
-            content = self._client.download_upload("experiments", experiment.ID, upload.id)
-        except Exception:
-            return False
-
-        # Atomic write
-        tmp = target.with_suffix(target.suffix + ".tmp")
-        tmp.write_bytes(content)
-        tmp.replace(target)
-
-        return True
 
 
 __all__ = ["ElabBridge"]
