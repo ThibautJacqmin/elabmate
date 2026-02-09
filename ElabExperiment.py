@@ -142,6 +142,42 @@ class ElabExperiment:
 
     def get_files(self):
         return self.api.uploads.read_uploads("experiments", self.ID)
+
+    def list_files(self) -> list[dict[str, Any]]:
+        """Return normalized metadata for all experiment uploads."""
+        files = []
+        for upload in self.get_files() or []:
+            upload_id = self._get_attr(upload, "id")
+            real_name = self._get_attr(upload, "real_name")
+            display_name = self._get_attr(upload, "name", real_name)
+            files.append(
+                {
+                    "id": upload_id,
+                    "name": display_name,
+                    "real_name": real_name,
+                    "filesize": self._get_attr(upload, "filesize"),
+                    "hash": self._get_attr(upload, "hash"),
+                    "hash_algorithm": self._get_attr(upload, "hash_algorithm"),
+                    "created_at": self._get_attr(upload, "created_at"),
+                    "raw": upload,
+                }
+            )
+        return files
+
+    def get_file(self, filename: str) -> Optional[dict[str, Any]]:
+        """Find one attachment by file name (matches real_name or display name)."""
+        for upload in self.list_files():
+            if filename in {upload.get("name"), upload.get("real_name")}:
+                return upload
+        return None
+
+    def download_file(self, file_id: int, destination: str | Path) -> Path:
+        """Download one upload to a local destination path."""
+        destination = Path(destination)
+        payload = self.api.download_upload("experiments", self.ID, int(file_id))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(payload)
+        return destination
     
     def add_step(self, text: str):
         self.api.steps.post_step("experiments", self.ID, body={"body": text})
@@ -239,5 +275,4 @@ class ElabExperiment:
     ID: {self.ID}
     category: {self.category}
     creation date: {self.creation_date}"""
-
 
