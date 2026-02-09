@@ -5,6 +5,7 @@ Created on Wed Apr 16 15:29:35 2025
 @author: ThibautJacqmin
 """
 
+import os
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -32,6 +33,7 @@ class ElabClient:
         self.statuses = ep.ExperimentsStatusApi(self.api_client)
         self.templates = ep.ExperimentsTemplatesApi(self.api_client)
         self.tags = ep.TagsApi(self.api_client)
+        self._team_id: int | None = None
         
     def download_upload(
         self,
@@ -83,9 +85,16 @@ class ElabClient:
 
     def experiment_creation_wrapper(func):
         @wraps(func)
-        def wrapper(self, title: str, category: int = None, **kwargs):
+        def wrapper(self, title: str, category: Union[int, str] = None, **kwargs):
             if self._has_title(title) and self.enforce_unique_titles:
                 raise DuplicateTitle(title)
+            if category is not None:
+                categories = self.category_dict
+                if isinstance(category, int):
+                    if category not in categories.values():
+                        raise InvalidCategory(str(category))
+                elif category not in categories:
+                    raise InvalidCategory(category)
             headers = func(self, title=title, category=category, **kwargs)
             ID = int(headers['Location'].split("/")[-1])
             experiment = ElabExperiment(self, ID)
@@ -98,15 +107,15 @@ class ElabClient:
 
     
     @experiment_creation_wrapper
-    def create_experiment(self, title: str, category: int = None):
+    def create_experiment(self, title: str, category: Union[int, str] = None):
         _, _, headers = self.experiments.post_experiment_with_http_info(body={"title": title})
         return headers
 
     @experiment_creation_wrapper
-    def create_experiment_from_template(self, title: str, template_name: str, category: int = None):
+    def create_experiment_from_template(self, title: str, template_name: str, category: Union[int, str] = None):
         template_id = self._get_template_id(name=template_name)
         if template_id is None:
-            raise InvalidTemplate
+            raise InvalidTemplate(template_name)
         _, _, headers = self.experiments.post_experiment_with_http_info(body={"template": template_id})
         return headers
 
@@ -118,15 +127,50 @@ class ElabClient:
         return {exp.title: exp.id for exp in self.experiments_list}      
     
     @property
-    def category_dict(self) -> dict[str: int]:
+    def category_dict(self) -> dict[str, int]:
         # Returns all possible categories in a dictionary {category_name: category_id}
-        cats = self.categories.read_team_experiments_categories("experiments")
+        team_id = self._get_team_id()
+        cats = self.categories.read_team_experiments_categories(team_id)
         return {cat.title:cat.id for cat in cats}
     
     @property
-    def status_dict(self) -> dict[str: int]:
+    def status_dict(self) -> dict[str, int]:
         # Returns all possible statuses in a dictionary {status_name: status_id}
-        return {s.title: s.id for s in self.statuses.read_team_experiments_status("experiments")}
+        team_id = self._get_team_id()
+        return {s.title: s.id for s in self.statuses.read_team_experiments_status(team_id)}
+
+    def _get_team_id(self) -> int:
+        if self._team_id is not None:
+            return self._team_id
+
+        raw = self.config.get("TEAM_ID") or os.getenv("ELAB_TEAM_ID")
+        if raw:
+            try:
+                self._team_id = int(raw)
+                return self._team_id
+            except ValueError as exc:
+                raise ValueError(f"Invalid TEAM_ID value: {raw!r}") from exc
+
+        try:
+            team = ep.TeamsApi(self.api_client).read_team("current")
+        except Exception as exc:
+            raise RuntimeError(
+                "TEAM_ID is not set and the team could not be resolved. "
+                "Set TEAM_ID in elab_server.conf or ELAB_TEAM_ID in the environment."
+            ) from exc
+
+        team_id = None
+        if isinstance(team, dict):
+            team_id = team.get("id")
+        else:
+            team_id = getattr(team, "id", None)
+        if team_id is None:
+            raise RuntimeError(
+                "Unable to determine team ID. "
+                "Set TEAM_ID in elab_server.conf or ELAB_TEAM_ID in the environment."
+            )
+        self._team_id = int(team_id)
+        return self._team_id
     
     def _get_template_id(self, name: str) -> int:
         templates = self.templates.read_experiments_templates()

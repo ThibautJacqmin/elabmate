@@ -26,7 +26,7 @@ exp.add_tag("updated")
 exp.remove_tag("updated")
 exp.steps
 exp.add_step("bla")
-exp.body="Once upon a time"
+exp.main_text = "Once upon a time"
 exp.add_file(r"", comment="initial dataset upload")
 exp.add_comment("Les sanglots longs des violons de l'automne")
 exp.category = "Dummy"

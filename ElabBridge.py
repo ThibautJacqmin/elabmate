@@ -129,7 +129,7 @@ class ElabBridge(AcquisitionBackend):
 
     def _update_remote_experiment(
         self,
-        experiment: "Experiment",
+        experiment: "ElabExperiment",
         payload: Mapping[str, Any],
         attachments: Tuple[str, ...],
     ) -> None:

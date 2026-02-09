@@ -18,12 +18,17 @@ class ElabExperiment:
                  **kwargs):
         self.api = api
         self.ID = ID
+        self._cache: Optional[dict[str, Any]] = None
 
     def _load(self):
         if self.ID is None:
             raise DeletedExperiment()
         exp = self.api.experiments.get_experiment(self.ID)
-        return exp.to_dict()
+        self._cache = exp.to_dict()
+        return self._cache
+
+    def refresh(self) -> dict[str, Any]:
+        return self._load()
 
     def _sync(self, updates: dict):
         self.api.experiments.patch_experiment(self.ID, body=updates)
@@ -50,6 +55,37 @@ class ElabExperiment:
         if isinstance(obj, dict):
             return obj.get(name, default)
         return default
+
+    @staticmethod
+    def _resolve_name_from_dict(values: dict[str, int], target_id: Any) -> Optional[str]:
+        if target_id is None:
+            return None
+        try:
+            target = int(target_id)
+        except (TypeError, ValueError):
+            return None
+        for name, value in values.items():
+            try:
+                if int(value) == target:
+                    return name
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    @staticmethod
+    def _resolve_existing_id(
+        selection: str | int,
+        values: dict[str, int],
+        invalid_exc,
+    ) -> int:
+        if isinstance(selection, int):
+            if selection in values.values():
+                return selection
+            raise invalid_exc(str(selection))
+        selected_id = values.get(selection)
+        if selected_id is None:
+            raise invalid_exc(selection)
+        return int(selected_id)
 
     def _select_existing_upload(self, uploads: Any, real_name: str) -> Optional[Any]:
         """
@@ -192,25 +228,42 @@ class ElabExperiment:
         self._load()
 
     def remove_tag(self, tag_name: str):
+        tags_api = getattr(self.api, "tags", None)
+        if tags_api is not None and hasattr(tags_api, "read_tags") and hasattr(tags_api, "patch_tag"):
+            try:
+                for tag in tags_api.read_tags("experiments", self.ID) or []:
+                    if self._get_attr(tag, "tag") != tag_name:
+                        continue
+                    tag_id = self._get_attr(tag, "id")
+                    if tag_id is None:
+                        break
+                    tags_api.patch_tag("experiments", self.ID, int(tag_id), body={"action": "unreference"})
+                    self._load()
+                    return
+            except Exception:
+                pass
         for tag in self.tags:
             if tag == tag_name:
-                self.clear_tags()  # fallback: clear all, no selective delete supported
+                self.clear_tags()
                 return
         raise InvalidTag(tag_name)
 
     def has_tag(self, tag_name: str) -> bool:
-        return any(tag.tag == tag_name for tag in self.tags)
+        return tag_name in self.tags
 
     def clear_tags(self):
-        self.api.tags.delete_tag("experiments", id=self.ID)      
+        self.api.tags.delete_tag("experiments", id=self.ID)
+        self._load()
 
     @property
     def _data(self):
-        return self._load()
+        if self._cache is None:
+            return self._load()
+        return self._cache
 
     @property
     def title(self):
-        return self._data["title"]
+        return self._data.get("title")
 
     @title.setter
     def title(self, value: str):
@@ -218,57 +271,127 @@ class ElabExperiment:
         
     @property
     def category(self):
-        return self._data["category_title"]
+        category_title = self._data.get("category_title")
+        if category_title:
+            return category_title
+        category_id = self._data.get("category")
+        try:
+            resolved = self._resolve_name_from_dict(self.api.category_dict, category_id)
+        except Exception:
+            resolved = None
+        if resolved:
+            return resolved
+        return str(category_id) if category_id is not None else None
     
     @category.setter
-    def category(self, category_name: str):
-        for name, cid in self.api.category_dict.items():
-            if name == category_name:
-                self._sync({"category": cid})
-                return
-        raise InvalidCategory(category_name)
+    def category(self, category_name: str | int):
+        category_id = self._resolve_existing_id(
+            category_name,
+            self.api.category_dict,
+            InvalidCategory,
+        )
+        self._sync({"category": category_id})
 
     @property
     def tags(self):
-        tags = self._data['tags']
-        if tags is not None:
-            return tags.split('|')
+        tags = self._data.get("tags")
+        if isinstance(tags, str):
+            names = [value for value in tags.split("|") if value]
+            if names:
+                return names
+
+        tags_api = getattr(self.api, "tags", None)
+        if tags_api is None or not hasattr(tags_api, "read_tags"):
+            return []
+        try:
+            remote_tags = tags_api.read_tags("experiments", self.ID)
+        except Exception:
+            return []
+        names = []
+        for tag in remote_tags or []:
+            name = self._get_attr(tag, "tag")
+            if name:
+                names.append(name)
+        return names
     
     @property
     def steps(self):
-        steps = [data['body'] for data in self._data['steps']]
-        return steps if steps is not None else None
+        steps = self._data.get("steps")
+        if steps is not None:
+            return [self._get_attr(data, "body") for data in steps if self._get_attr(data, "body") is not None]
+        steps_api = getattr(self.api, "steps", None)
+        if steps_api is None or not hasattr(steps_api, "read_steps"):
+            return []
+        try:
+            remote_steps = steps_api.read_steps("experiments", self.ID)
+        except Exception:
+            return []
+        return [self._get_attr(data, "body") for data in remote_steps or [] if self._get_attr(data, "body") is not None]
     
     @property
     def comments(self):
-        return [data['comment'] for data in self._data['comments']]
+        comments = self._data.get("comments")
+        if comments is not None:
+            return [self._get_attr(data, "comment") for data in comments if self._get_attr(data, "comment") is not None]
+        comments_api = getattr(self.api, "comments", None)
+        if comments_api is None or not hasattr(comments_api, "read_entity_comments"):
+            return []
+        try:
+            remote_comments = comments_api.read_entity_comments("experiments", self.ID)
+        except Exception:
+            return []
+        return [
+            self._get_attr(data, "comment")
+            for data in remote_comments or []
+            if self._get_attr(data, "comment") is not None
+        ]
 
     @property
     def main_text(self):
-        return self._data["body"]
+        return self._data.get("body", "")
 
     @main_text.setter
     def main_text(self, value: str):
         self._sync({"body": value})
+
+    @property
+    def body(self):
+        return self.main_text
+
+    @body.setter
+    def body(self, value: str):
+        self.main_text = value
         
     @property
     def status(self):
-        return self._data["status_title"]
+        status_title = self._data.get("status_title")
+        if status_title:
+            return status_title
+        status_id = self._data.get("status")
+        try:
+            resolved = self._resolve_name_from_dict(self.api.status_dict, status_id)
+        except Exception:
+            resolved = None
+        if resolved:
+            return resolved
+        return str(status_id) if status_id is not None else None
     
     @status.setter
-    def status(self, status_name: str):
-        if status_name in self.api.status_dict:
-            self._sync({'status': self.api.status_dict[status_name]})
-        else:
-            raise InvalidStatus(status_name)
+    def status(self, status_name: str | int):
+        status_id = self._resolve_existing_id(
+            status_name,
+            self.api.status_dict,
+            InvalidStatus,
+        )
+        self._sync({"status": status_id})
 
     @property
     def creation_date(self):
-        return self._data["created_at"]
+        return self._data.get("created_at")
 
     @property
     def last_modification(self):
-        return self._data["modified_at"]
+        return self._data.get("modified_at")
     
     def __repr__(self):
         return f"""Experiment title: {self.title}
