@@ -13,8 +13,8 @@ from elabmate import ElabClient
 from elabmate import InvalidCategory, InvalidStatus
 
 
-path_to_conf_file = 'C:/Users/ThibautJacqmin/Documents/Lkb/Elab API key'
-CONFIG_PATH = path_to_conf_file + '/elab_server.conf'
+path_to_conf_file = "C:/Users/ThibautJacqmin/Documents/Lkb/Elab API key"
+CONFIG_PATH = path_to_conf_file + "/elab_server.conf"
 
 
 class TestElabExperimentIntegration(unittest.TestCase):
@@ -31,16 +31,22 @@ class TestElabExperimentIntegration(unittest.TestCase):
         categories = cls.client.category_dict
         statuses = cls.client.status_dict
         if not categories:
-            raise AssertionError("No category available on server to run integration test.")
+            raise AssertionError(
+                "No category available on server to run integration test."
+            )
         if not statuses:
-            raise AssertionError("No status available on server to run integration test.")
+            raise AssertionError(
+                "No status available on server to run integration test."
+            )
 
         requested_category = os.getenv("ELAB_TEST_CATEGORY")
         requested_status = os.getenv("ELAB_TEST_STATUS")
 
         if requested_category:
             if requested_category not in categories:
-                raise AssertionError(f"ELAB_TEST_CATEGORY '{requested_category}' does not exist.")
+                raise AssertionError(
+                    f"ELAB_TEST_CATEGORY '{requested_category}' does not exist."
+                )
             cls.category_name = requested_category
             print(f"[setup] Using requested category: {cls.category_name}")
         else:
@@ -49,7 +55,9 @@ class TestElabExperimentIntegration(unittest.TestCase):
 
         if requested_status:
             if requested_status not in statuses:
-                raise AssertionError(f"ELAB_TEST_STATUS '{requested_status}' does not exist.")
+                raise AssertionError(
+                    f"ELAB_TEST_STATUS '{requested_status}' does not exist."
+                )
             cls.status_name = requested_status
             print(f"[setup] Using requested status: {cls.status_name}")
         else:
@@ -77,7 +85,9 @@ class TestElabExperimentIntegration(unittest.TestCase):
             raise AssertionError(f"{message} (last error: {last_error})")
         raise AssertionError(message)
 
-    def _get_file_with_retry(self, filename: str, retries: int = 10, delay: float = 0.5):
+    def _get_file_with_retry(
+        self, filename: str, retries: int = 10, delay: float = 0.5
+    ):
         for _ in range(retries):
             meta = self.exp.get_file(filename)
             if meta is not None:
@@ -126,7 +136,9 @@ class TestElabExperimentIntegration(unittest.TestCase):
         print("[test] Adding comment...")
         comment_text = f"Comment {token}"
         exp.add_comment(comment_text)
-        self._wait_for(lambda: comment_text in exp.comments, "Comment not visible after add.")
+        self._wait_for(
+            lambda: comment_text in exp.comments, "Comment not visible after add."
+        )
         print("[test] Comment added.")
 
         # Category and status
@@ -142,7 +154,9 @@ class TestElabExperimentIntegration(unittest.TestCase):
             self.assertIn(exp.status, self.client.status_dict)
         print("[test] Updating status...")
         exp.status = self.status_name
-        self._wait_for(lambda: exp.status == self.status_name, "Status not visible after update.")
+        self._wait_for(
+            lambda: exp.status == self.status_name, "Status not visible after update."
+        )
         with self.assertRaises(InvalidStatus):
             exp.status = f"DOES_NOT_EXIST_{token}"
         print("[test] Status validation complete.")

@@ -15,8 +15,8 @@ from elabmate import ElabClient
 # Step 0: Generate an API key in eLabFTW and fill `elab_server.conf`.
 # You can also pass an absolute path instead of this default path.
 # Keep API keys private and avoid committing the config file to git.
-path_to_conf_file = 'C:/Users/ThibautJacqmin/Documents/Lkb/Elab API key'
-CONFIG_PATH = path_to_conf_file + '/elab_server.conf'
+path_to_conf_file = "C:/Users/ThibautJacqmin/Documents/Lkb/Elab API key"
+CONFIG_PATH = path_to_conf_file + "/elab_server.conf"
 
 # Step 1: Initialize API client.
 client = ElabClient(CONFIG_PATH)
@@ -75,7 +75,6 @@ if meta is not None:
 
 # Step 7: List remote attachments of an experiment:
 for info in exp.list_files():
-    print(f'{info["real_name"]} (id={info["id"]}, size={info["filesize"]})')
+    print(f"{info['real_name']} (id={info['id']}, size={info['filesize']})")
 
 print(f"Done. Experiment URL ID: {exp.ID}")
-

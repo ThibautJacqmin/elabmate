@@ -7,7 +7,6 @@ sync Labmate acquisitions and analysis metadata to eLabFTW experiments.
 @author Thibaut Jacqmin
 """
 
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,6 +19,7 @@ from .exceptions import DuplicateTitle
 try:  # pragma: no cover - fallback for optional labmate dependency
     from labmate.acquisition.backend import AcquisitionBackend  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover - labmate optional during tests
+
     class AcquisitionBackend:  # type: ignore[too-many-ancestors]
         """Lightweight stand-in used when labmate isn't available."""
 
@@ -28,6 +28,7 @@ except ModuleNotFoundError:  # pragma: no cover - labmate optional during tests
 
         def load_snapshot(self, acquisition: Any) -> None:  # noqa: D401 - simple stub
             """Compatibility no-op."""
+
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .experiment import ElabExperiment
@@ -38,7 +39,9 @@ PayloadBuilder = Callable[
     ["NotebookAcquisitionData", Tuple[str, ...], Optional[Mapping[str, Any]]],
     Dict[str, Any],
 ]
-ExperimentResolver = Callable[["NotebookAcquisitionData", Dict[str, Any]], Optional["ElabExperiment"]]
+ExperimentResolver = Callable[
+    ["NotebookAcquisitionData", Dict[str, Any]], Optional["ElabExperiment"]
+]
 
 
 class ElabBridge(AcquisitionBackend):
@@ -84,7 +87,9 @@ class ElabBridge(AcquisitionBackend):
         identifier = self._resolve_experiment_identifier(acquisition, payload)
         if identifier:
             try:
-                setattr(acquisition, "_labmate_elabftw_experiment_identifier", identifier)
+                setattr(
+                    acquisition, "_labmate_elabftw_experiment_identifier", identifier
+                )
             except AttributeError:
                 pass
         experiment = self._ensure_experiment(acquisition, payload, experiment)
@@ -140,7 +145,9 @@ class ElabBridge(AcquisitionBackend):
         title = Path(filepath).parent.name
         return self._load_experiment_by_title(title)
 
-    def get_experiment_from_analysis(self, analysis_data: Any) -> Optional["ElabExperiment"]:
+    def get_experiment_from_analysis(
+        self, analysis_data: Any
+    ) -> Optional["ElabExperiment"]:
         """
         Resolve experiment from analysis data by inferring title from parent folder name.
         Useful when `aqm.current_acquisition` is None (old-data analysis mode).
@@ -159,7 +166,9 @@ class ElabBridge(AcquisitionBackend):
         except Exception:
             return None
 
-    def _resolve_acquisition_source(self, source: Any) -> Optional["NotebookAcquisitionData"]:
+    def _resolve_acquisition_source(
+        self, source: Any
+    ) -> Optional["NotebookAcquisitionData"]:
         """Normalize acquisition sources from Labmate objects."""
         if source is None:
             return self._last_acquisition
@@ -170,8 +179,10 @@ class ElabBridge(AcquisitionBackend):
                 candidate = getattr(source, attr)
             except Exception:
                 candidate = None
-            if candidate is not None and hasattr(candidate, "experiment_name") and hasattr(
-                candidate, "filepath"
+            if (
+                candidate is not None
+                and hasattr(candidate, "experiment_name")
+                and hasattr(candidate, "filepath")
             ):
                 return candidate
         return None
@@ -226,11 +237,15 @@ class ElabBridge(AcquisitionBackend):
 
         title = payload.get("title") or getattr(acquisition, "experiment_name", None)
         if not title:
-            raise ValueError("Cannot determine experiment title for ElabFTW experiment.")
+            raise ValueError(
+                "Cannot determine experiment title for ElabFTW experiment."
+            )
 
         create_experiment = getattr(self._client, "create_experiment", None)
         if create_experiment is None:
-            raise AttributeError("Client does not provide a 'create_experiment' method.")
+            raise AttributeError(
+                "Client does not provide a 'create_experiment' method."
+            )
 
         try:
             experiment = create_experiment(title=title)
@@ -291,7 +306,6 @@ class ElabBridge(AcquisitionBackend):
             else:
                 experiment.add_file(path)
 
-
     def save_snapshot(self, acquisition: "NotebookAcquisitionData") -> None:
         """Save a snapshot of the acquisition to eLabFTW (attachments only)."""
         self._last_acquisition = acquisition
@@ -301,7 +315,11 @@ class ElabBridge(AcquisitionBackend):
             original_path = Path(filepath)
             resolved_path: Optional[Path] = None
 
-            candidate = original_path if original_path.suffix else original_path.with_suffix(".h5")
+            candidate = (
+                original_path
+                if original_path.suffix
+                else original_path.with_suffix(".h5")
+            )
             if candidate.exists():
                 resolved_path = candidate
             else:
@@ -394,7 +412,9 @@ class ElabBridge(AcquisitionBackend):
         if identifier is not None:
             self._experiment_cache_by_identifier[identifier] = experiment
             try:
-                setattr(acquisition, "_labmate_elabftw_experiment_identifier", identifier)
+                setattr(
+                    acquisition, "_labmate_elabftw_experiment_identifier", identifier
+                )
             except AttributeError:
                 pass
         try:
@@ -410,7 +430,9 @@ class ElabBridge(AcquisitionBackend):
         payload: Optional[Mapping[str, Any]] = None,
     ) -> Optional[str]:
         """Resolve a stable experiment identifier for caching and lookup."""
-        identifier = getattr(acquisition, "_labmate_elabftw_experiment_identifier", None)
+        identifier = getattr(
+            acquisition, "_labmate_elabftw_experiment_identifier", None
+        )
         if identifier:
             return str(identifier)
 
@@ -429,7 +451,7 @@ class ElabBridge(AcquisitionBackend):
         """Labmate hook: snapshots are not loaded from eLabFTW."""
         # The integration currently does not support loading snapshots.
         return None
-    
+
     def ensure_local_file(self, local_path: str | Path) -> bool:
         """Ensure a requested attachment exists locally, downloading if needed."""
         local_path = Path(local_path)
@@ -454,7 +476,11 @@ class ElabBridge(AcquisitionBackend):
             files = exp.list_files()
             for f in files:
                 fname = f["name"] if isinstance(f, dict) else getattr(f, "name", None)
-                real_name = f.get("real_name") if isinstance(f, dict) else getattr(f, "real_name", None)
+                real_name = (
+                    f.get("real_name")
+                    if isinstance(f, dict)
+                    else getattr(f, "real_name", None)
+                )
                 if attachment_name in {fname, real_name}:
                     match = f
                     break
@@ -471,7 +497,6 @@ class ElabBridge(AcquisitionBackend):
         exp.download_file(file_id=file_id, destination=local_path)
 
         return local_path.exists()
-
 
 
 __all__ = ["ElabBridge"]

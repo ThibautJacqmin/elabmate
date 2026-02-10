@@ -12,13 +12,16 @@ import hashlib
 from pathlib import Path
 from typing import Any, Optional
 
+
 class ElabExperiment:
     """Represents a remote eLabFTW experiment with convenience helpers."""
 
-    def __init__(self,
-                 api,
-                 ID: int = None,  # use ID instead of id (python built in function)
-                 **kwargs):
+    def __init__(
+        self,
+        api,
+        ID: int = None,  # use ID instead of id (python built in function)
+        **kwargs,
+    ):
         """Create an experiment wrapper bound to an API client.
 
         Args:
@@ -45,10 +48,12 @@ class ElabExperiment:
         """Patch experiment attributes on the server and refresh cache."""
         self.api.experiments.patch_experiment(self.ID, body=updates)
         self._load()
-        
+
     def add_file(self, file_path: str, comment: str = "Uploaded via API"):
         """Attach a file to the experiment via a simple upload."""
-        self.api.uploads.post_upload("experiments", self.ID, file=file_path, comment=comment)
+        self.api.uploads.post_upload(
+            "experiments", self.ID, file=file_path, comment=comment
+        )
         self._load()
 
     def upload_file(
@@ -75,7 +80,7 @@ class ElabExperiment:
             )
             return
         self.add_file(file_path=file_path, comment=comment)
-        
+
     @staticmethod
     def _sha256_file(path: str, chunk_size: int = 1024 * 1024) -> str:
         """Streamed sha256 to avoid loading big files in memory."""
@@ -95,7 +100,9 @@ class ElabExperiment:
         return default
 
     @staticmethod
-    def _resolve_name_from_dict(values: dict[str, int], target_id: Any) -> Optional[str]:
+    def _resolve_name_from_dict(
+        values: dict[str, int], target_id: Any
+    ) -> Optional[str]:
         """Resolve an ID to its name using a {name: id} mapping."""
         if target_id is None:
             return None
@@ -140,8 +147,10 @@ class ElabExperiment:
                 matches.append(u)
         if not matches:
             return None
+
         def key(u: Any) -> str:
             return self._get_attr(u, "created_at", "") or ""
+
         matches.sort(key=key, reverse=True)
         return matches[0]
 
@@ -174,7 +183,9 @@ class ElabExperiment:
         existing = self._select_existing_upload(uploads, real_name)
         if existing is None:
             # First time: create
-            self.api.uploads.post_upload("experiments", self.ID, file=file_path, comment=comment)
+            self.api.uploads.post_upload(
+                "experiments", self.ID, file=file_path, comment=comment
+            )
             self._load()
             return
 
@@ -200,7 +211,9 @@ class ElabExperiment:
         # Replace existing upload (no duplication)
         if existing_id is None:
             # Worst case fallback: create new
-            self.api.uploads.post_upload("experiments", self.ID, file=file_path, comment=comment)
+            self.api.uploads.post_upload(
+                "experiments", self.ID, file=file_path, comment=comment
+            )
             self._load()
             return
 
@@ -212,9 +225,8 @@ class ElabExperiment:
             int(existing_id),
             file=file_path,
             comment=comment,
-       )
+        )
         self._load()
-
 
     def get_files(self):
         """Return the raw uploads list for this experiment."""
@@ -255,7 +267,7 @@ class ElabExperiment:
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(payload)
         return destination
-    
+
     def add_step(self, text: str):
         """Append a step to the experiment."""
         self.api.steps.post_step("experiments", self.ID, body={"body": text})
@@ -263,7 +275,9 @@ class ElabExperiment:
 
     def add_comment(self, text: str):
         """Append a comment to the experiment."""
-        self.api.comments.post_entity_comments("experiments", self.ID, body={"comment": text})
+        self.api.comments.post_entity_comments(
+            "experiments", self.ID, body={"comment": text}
+        )
         self._load()
 
     def add_tag(self, tag: str):
@@ -274,7 +288,11 @@ class ElabExperiment:
     def remove_tag(self, tag_name: str):
         """Remove a tag reference from the experiment."""
         tags_api = getattr(self.api, "tags", None)
-        if tags_api is not None and hasattr(tags_api, "read_tags") and hasattr(tags_api, "patch_tag"):
+        if (
+            tags_api is not None
+            and hasattr(tags_api, "read_tags")
+            and hasattr(tags_api, "patch_tag")
+        ):
             try:
                 for tag in tags_api.read_tags("experiments", self.ID) or []:
                     if self._get_attr(tag, "tag") != tag_name:
@@ -282,7 +300,12 @@ class ElabExperiment:
                     tag_id = self._get_attr(tag, "id")
                     if tag_id is None:
                         break
-                    tags_api.patch_tag("experiments", self.ID, int(tag_id), body={"action": "unreference"})
+                    tags_api.patch_tag(
+                        "experiments",
+                        self.ID,
+                        int(tag_id),
+                        body={"action": "unreference"},
+                    )
                     self._load()
                     return
             except Exception:
@@ -317,7 +340,7 @@ class ElabExperiment:
     @title.setter
     def title(self, value: str):
         self._sync({"title": value})
-        
+
     @property
     def category(self):
         """Experiment category name or ID (server-backed)."""
@@ -332,7 +355,7 @@ class ElabExperiment:
         if resolved:
             return resolved
         return str(category_id) if category_id is not None else None
-    
+
     @category.setter
     def category(self, category_name: str | int):
         category_id = self._resolve_existing_id(
@@ -364,13 +387,17 @@ class ElabExperiment:
             if name:
                 names.append(name)
         return names
-    
+
     @property
     def steps(self):
         """Experiment steps as a list of strings."""
         steps = self._data.get("steps")
         if steps is not None:
-            return [self._get_attr(data, "body") for data in steps if self._get_attr(data, "body") is not None]
+            return [
+                self._get_attr(data, "body")
+                for data in steps
+                if self._get_attr(data, "body") is not None
+            ]
         steps_api = getattr(self.api, "steps", None)
         if steps_api is None or not hasattr(steps_api, "read_steps"):
             return []
@@ -378,14 +405,22 @@ class ElabExperiment:
             remote_steps = steps_api.read_steps("experiments", self.ID)
         except Exception:
             return []
-        return [self._get_attr(data, "body") for data in remote_steps or [] if self._get_attr(data, "body") is not None]
-    
+        return [
+            self._get_attr(data, "body")
+            for data in remote_steps or []
+            if self._get_attr(data, "body") is not None
+        ]
+
     @property
     def comments(self):
         """Experiment comments as a list of strings."""
         comments = self._data.get("comments")
         if comments is not None:
-            return [self._get_attr(data, "comment") for data in comments if self._get_attr(data, "comment") is not None]
+            return [
+                self._get_attr(data, "comment")
+                for data in comments
+                if self._get_attr(data, "comment") is not None
+            ]
         comments_api = getattr(self.api, "comments", None)
         if comments_api is None or not hasattr(comments_api, "read_entity_comments"):
             return []
@@ -416,7 +451,7 @@ class ElabExperiment:
     @body.setter
     def body(self, value: str):
         self.main_text = value
-        
+
     @property
     def status(self):
         """Experiment status name or ID (server-backed)."""
@@ -431,7 +466,7 @@ class ElabExperiment:
         if resolved:
             return resolved
         return str(status_id) if status_id is not None else None
-    
+
     @status.setter
     def status(self, status_name: str | int):
         status_id = self._resolve_existing_id(
@@ -450,11 +485,10 @@ class ElabExperiment:
     def last_modification(self):
         """Last modification timestamp for the experiment."""
         return self._data.get("modified_at")
-    
+
     def __repr__(self):
         """Return a compact human-readable representation."""
         return f"""Experiment title: {self.title}
     ID: {self.ID}
     category: {self.category}
     creation date: {self.creation_date}"""
-
