@@ -22,12 +22,12 @@ Create a configuration file (default: `elabmate.conf`) with one `KEY=VALUE`
 per line:
 
 ```ini
-API_HOST_URL=https://your_elab_server_address/api/v2
-API_KEY=your_api_key
-VERIFY_SSL=false
+API_HOST_URL=https://elabftw_server_ip_address/api/v2
+API_KEY= you API key, generated from the eLabFTW interface: Settings/API Key
 UNIQUE_EXPERIMENTS_TITLES=true
-TEAM_ID=1
-LABMATE_DATA_DIR=C:/path/to/labmate/data
+VERIFY_SSL=false
+TEAM_ID= check the team id (integer 1, 2, 3...) on eLabFTW interface: SysAdmin panel/TEAMS
+LABMATE_DATA_DIR=optional, only if you use labmate
 ```
 
 Notes:
