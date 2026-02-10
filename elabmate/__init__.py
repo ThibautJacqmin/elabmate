@@ -1,4 +1,7 @@
-"""Public API for elabmate."""
+"""Public API for elabmate.
+
+@author Thibaut Jacqmin
+"""
 
 from .bridge import ElabBridge
 from .client import ElabClient

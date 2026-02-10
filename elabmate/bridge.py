@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Wed Apr 16 15:29:35 2025
+"""Labmate integration bridge for eLabFTW.
 
-@author: ThibautJacqmin
+This module provides :class:`ElabBridge`, an optional backend that can
+sync Labmate acquisitions and analysis metadata to eLabFTW experiments.
+
+@author Thibaut Jacqmin
 """
 
 
@@ -40,7 +42,11 @@ ExperimentResolver = Callable[["NotebookAcquisitionData", Dict[str, Any]], Optio
 
 
 class ElabBridge(AcquisitionBackend):
-    """Synchronise Labmate acquisitions with ElabFTW experiments."""
+    """Synchronise Labmate acquisitions with eLabFTW experiments.
+
+    The bridge can be registered as a Labmate acquisition backend. It
+    creates or resolves experiments, updates metadata, and uploads files.
+    """
 
     def __init__(
         self,
@@ -49,6 +55,13 @@ class ElabBridge(AcquisitionBackend):
         payload_builder: Optional[PayloadBuilder] = None,
         experiment_resolver: Optional[ExperimentResolver] = None,
     ) -> None:
+        """Initialize the bridge with a client and optional hooks.
+
+        Args:
+            client: :class:`ElabClient` instance (or a compatible API).
+            payload_builder: Optional function to build a payload dict from an acquisition.
+            experiment_resolver: Optional function to resolve an experiment manually.
+        """
         self._client = client
         self._payload_builder = payload_builder or self._default_payload_builder
         self._experiment_resolver = experiment_resolver
@@ -64,6 +77,7 @@ class ElabBridge(AcquisitionBackend):
         metadata: Optional[Mapping[str, Any]] = None,
         experiment: Optional["ElabExperiment"] = None,
     ) -> "ElabExperiment":
+        """Create or update an experiment for a given acquisition."""
         self._last_acquisition = acquisition
         attachment_paths = tuple(str(Path(path)) for path in attachments)
         payload = self._payload_builder(acquisition, attachment_paths, metadata)
@@ -134,6 +148,7 @@ class ElabBridge(AcquisitionBackend):
         return self.get_experiment(analysis_data, wait=0.0)
 
     def _load_experiment_by_title(self, title: str) -> Optional["ElabExperiment"]:
+        """Best-effort experiment loader by title."""
         if self._client is None:
             return None
         load_experiment = getattr(self._client, "load_experiment", None)
@@ -145,6 +160,7 @@ class ElabBridge(AcquisitionBackend):
             return None
 
     def _resolve_acquisition_source(self, source: Any) -> Optional["NotebookAcquisitionData"]:
+        """Normalize acquisition sources from Labmate objects."""
         if source is None:
             return self._last_acquisition
         if hasattr(source, "experiment_name") and hasattr(source, "filepath"):
@@ -161,6 +177,7 @@ class ElabBridge(AcquisitionBackend):
         return None
 
     def _resolve_analysis_source(self, source: Any) -> Optional[Any]:
+        """Normalize analysis sources from Labmate objects."""
         if source is None:
             return None
         if hasattr(source, "filepath") and not hasattr(source, "experiment_name"):
@@ -180,6 +197,7 @@ class ElabBridge(AcquisitionBackend):
         attachments: Tuple[str, ...],
         metadata: Optional[Mapping[str, Any]],
     ) -> Dict[str, Any]:
+        """Build a minimal payload from an acquisition."""
         payload: Dict[str, Any] = {
             "title": getattr(acquisition, "experiment_name", None),
             "attachments": attachments,
@@ -194,6 +212,7 @@ class ElabBridge(AcquisitionBackend):
         payload: Dict[str, Any],
         experiment: Optional["ElabExperiment"],
     ) -> "ElabExperiment":
+        """Return a resolved experiment (create or reuse)."""
         if experiment is not None:
             return experiment
 
@@ -233,6 +252,7 @@ class ElabBridge(AcquisitionBackend):
         payload: Mapping[str, Any],
         attachments: Tuple[str, ...],
     ) -> None:
+        """Apply payload fields and attachments to a remote experiment."""
         body = payload.get("body")
         if body is not None and hasattr(experiment, "main_text"):
             experiment.main_text = body
@@ -273,6 +293,7 @@ class ElabBridge(AcquisitionBackend):
 
 
     def save_snapshot(self, acquisition: "NotebookAcquisitionData") -> None:
+        """Save a snapshot of the acquisition to eLabFTW (attachments only)."""
         self._last_acquisition = acquisition
         attachments: Tuple[Path, ...] = ()
         filepath = getattr(acquisition, "filepath", None)
@@ -342,6 +363,7 @@ class ElabBridge(AcquisitionBackend):
     def _get_cached_experiment(
         self, acquisition: "NotebookAcquisitionData"
     ) -> Optional["ElabExperiment"]:
+        """Return a cached experiment for the acquisition if available."""
         cached = getattr(acquisition, "_labmate_elabftw_experiment", None)
         if cached is not None:
             return cached
@@ -366,6 +388,7 @@ class ElabBridge(AcquisitionBackend):
         acquisition: "NotebookAcquisitionData",
         experiment: "ElabExperiment",
     ) -> None:
+        """Cache the experiment on the acquisition object when possible."""
         self._last_acquisition = acquisition
         identifier = self._resolve_experiment_identifier(acquisition)
         if identifier is not None:
@@ -386,6 +409,7 @@ class ElabBridge(AcquisitionBackend):
         acquisition: "NotebookAcquisitionData",
         payload: Optional[Mapping[str, Any]] = None,
     ) -> Optional[str]:
+        """Resolve a stable experiment identifier for caching and lookup."""
         identifier = getattr(acquisition, "_labmate_elabftw_experiment_identifier", None)
         if identifier:
             return str(identifier)
@@ -402,10 +426,12 @@ class ElabBridge(AcquisitionBackend):
         return None
 
     def load_snapshot(self, acquisition: "NotebookAcquisitionData") -> None:
+        """Labmate hook: snapshots are not loaded from eLabFTW."""
         # The integration currently does not support loading snapshots.
         return None
     
     def ensure_local_file(self, local_path: str | Path) -> bool:
+        """Ensure a requested attachment exists locally, downloading if needed."""
         local_path = Path(local_path)
 
         # Already present

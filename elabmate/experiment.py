@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Wed Apr 16 15:31:59 2025
+"""Experiment helper for the eLabFTW API.
 
-@author: ThibautJacqmin
+This module defines :class:`ElabExperiment`, a convenience wrapper around
+remote eLabFTW experiments and their attachments, tags, steps, and comments.
+
+@author Thibaut Jacqmin
 """
 
 from .exceptions import InvalidStatus, InvalidCategory, InvalidTag, DeletedExperiment
@@ -11,16 +13,24 @@ from pathlib import Path
 from typing import Any, Optional
 
 class ElabExperiment:
+    """Represents a remote eLabFTW experiment with convenience helpers."""
 
     def __init__(self,
                  api,
                  ID: int = None,  # use ID instead of id (python built in function)
                  **kwargs):
+        """Create an experiment wrapper bound to an API client.
+
+        Args:
+            api: An :class:`ElabClient` instance.
+            ID: Experiment identifier on the server.
+        """
         self.api = api
         self.ID = ID
         self._cache: Optional[dict[str, Any]] = None
 
     def _load(self):
+        """Fetch the experiment data from the server and refresh cache."""
         if self.ID is None:
             raise DeletedExperiment()
         exp = self.api.experiments.get_experiment(self.ID)
@@ -28,13 +38,16 @@ class ElabExperiment:
         return self._cache
 
     def refresh(self) -> dict[str, Any]:
+        """Refresh and return the cached experiment data."""
         return self._load()
 
     def _sync(self, updates: dict):
+        """Patch experiment attributes on the server and refresh cache."""
         self.api.experiments.patch_experiment(self.ID, body=updates)
         self._load()
         
     def add_file(self, file_path: str, comment: str = "Uploaded via API"):
+        """Attach a file to the experiment via a simple upload."""
         self.api.uploads.post_upload("experiments", self.ID, file=file_path, comment=comment)
         self._load()
 
@@ -83,6 +96,7 @@ class ElabExperiment:
 
     @staticmethod
     def _resolve_name_from_dict(values: dict[str, int], target_id: Any) -> Optional[str]:
+        """Resolve an ID to its name using a {name: id} mapping."""
         if target_id is None:
             return None
         try:
@@ -103,6 +117,7 @@ class ElabExperiment:
         values: dict[str, int],
         invalid_exc,
     ) -> int:
+        """Resolve a name or ID to a valid ID or raise."""
         if isinstance(selection, int):
             if selection in values.values():
                 return selection
@@ -202,6 +217,7 @@ class ElabExperiment:
 
 
     def get_files(self):
+        """Return the raw uploads list for this experiment."""
         return self.api.uploads.read_uploads("experiments", self.ID)
 
     def list_files(self) -> list[dict[str, Any]]:
@@ -241,18 +257,22 @@ class ElabExperiment:
         return destination
     
     def add_step(self, text: str):
+        """Append a step to the experiment."""
         self.api.steps.post_step("experiments", self.ID, body={"body": text})
         self._load()
 
     def add_comment(self, text: str):
+        """Append a comment to the experiment."""
         self.api.comments.post_entity_comments("experiments", self.ID, body={"comment": text})
         self._load()
 
     def add_tag(self, tag: str):
+        """Attach a tag to the experiment."""
         self.api.tags.post_tag("experiments", self.ID, body={"tag": tag})
         self._load()
 
     def remove_tag(self, tag_name: str):
+        """Remove a tag reference from the experiment."""
         tags_api = getattr(self.api, "tags", None)
         if tags_api is not None and hasattr(tags_api, "read_tags") and hasattr(tags_api, "patch_tag"):
             try:
@@ -274,20 +294,24 @@ class ElabExperiment:
         raise InvalidTag(tag_name)
 
     def has_tag(self, tag_name: str) -> bool:
+        """Return True if a tag is present on the experiment."""
         return tag_name in self.tags
 
     def clear_tags(self):
+        """Remove all tags from the experiment."""
         self.api.tags.delete_tag("experiments", id=self.ID)
         self._load()
 
     @property
     def _data(self):
+        """Internal cached experiment payload."""
         if self._cache is None:
             return self._load()
         return self._cache
 
     @property
     def title(self):
+        """Experiment title (server-backed)."""
         return self._data.get("title")
 
     @title.setter
@@ -296,6 +320,7 @@ class ElabExperiment:
         
     @property
     def category(self):
+        """Experiment category name or ID (server-backed)."""
         category_title = self._data.get("category_title")
         if category_title:
             return category_title
@@ -319,6 +344,7 @@ class ElabExperiment:
 
     @property
     def tags(self):
+        """Experiment tags as a list of strings."""
         tags = self._data.get("tags")
         if isinstance(tags, str):
             names = [value for value in tags.split("|") if value]
@@ -341,6 +367,7 @@ class ElabExperiment:
     
     @property
     def steps(self):
+        """Experiment steps as a list of strings."""
         steps = self._data.get("steps")
         if steps is not None:
             return [self._get_attr(data, "body") for data in steps if self._get_attr(data, "body") is not None]
@@ -355,6 +382,7 @@ class ElabExperiment:
     
     @property
     def comments(self):
+        """Experiment comments as a list of strings."""
         comments = self._data.get("comments")
         if comments is not None:
             return [self._get_attr(data, "comment") for data in comments if self._get_attr(data, "comment") is not None]
@@ -373,6 +401,7 @@ class ElabExperiment:
 
     @property
     def main_text(self):
+        """Main body text of the experiment."""
         return self._data.get("body", "")
 
     @main_text.setter
@@ -381,6 +410,7 @@ class ElabExperiment:
 
     @property
     def body(self):
+        """Alias for :attr:`main_text`."""
         return self.main_text
 
     @body.setter
@@ -389,6 +419,7 @@ class ElabExperiment:
         
     @property
     def status(self):
+        """Experiment status name or ID (server-backed)."""
         status_title = self._data.get("status_title")
         if status_title:
             return status_title
@@ -412,13 +443,16 @@ class ElabExperiment:
 
     @property
     def creation_date(self):
+        """Creation timestamp for the experiment."""
         return self._data.get("created_at")
 
     @property
     def last_modification(self):
+        """Last modification timestamp for the experiment."""
         return self._data.get("modified_at")
     
     def __repr__(self):
+        """Return a compact human-readable representation."""
         return f"""Experiment title: {self.title}
     ID: {self.ID}
     category: {self.category}
