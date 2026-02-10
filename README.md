@@ -18,7 +18,7 @@ python -m pip install -e .
 
 ## Configuration
 
-Create a configuration file (default: `elab_server.conf`) with one `KEY=VALUE`
+Create a configuration file (default: `elabmate.conf`) with one `KEY=VALUE`
 per line:
 
 ```ini
@@ -27,6 +27,7 @@ API_KEY=your_api_key
 VERIFY_SSL=false
 UNIQUE_EXPERIMENTS_TITLES=true
 TEAM_ID=1
+LABMATE_DATA_DIR=C:/path/to/labmate/data
 ```
 
 Notes:
@@ -38,7 +39,7 @@ Notes:
 ```python
 from elabmate import ElabClient
 
-client = ElabClient("elab_server.conf")
+client = ElabClient()
 exp = client.create_experiment(title="My experiment")
 
 exp.main_text = "Experiment notes..."
@@ -65,10 +66,6 @@ Run integration tests (requires a valid eLabFTW server/config):
 ```bash
 python -m unittest discover -s tests -p "test_*.py"
 ```
-
-Optional environment variables for tests:
-- `ELAB_TEST_CATEGORY`
-- `ELAB_TEST_STATUS`
 
 ## References
 - eLabFTW documentation: https://doc.elabftw.net/

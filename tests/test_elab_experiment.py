@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import os
 import time
 import urllib3
 import unittest
@@ -13,8 +12,7 @@ from elabmate import ElabClient
 from elabmate import InvalidCategory, InvalidStatus
 
 
-path_to_conf_file = "C:/Users/ThibautJacqmin/Documents/Lkb/Elab API key"
-CONFIG_PATH = path_to_conf_file + "/elab_server.conf"
+CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "elabmate.conf")
 
 
 class TestElabExperimentIntegration(unittest.TestCase):
@@ -39,30 +37,11 @@ class TestElabExperimentIntegration(unittest.TestCase):
                 "No status available on server to run integration test."
             )
 
-        requested_category = os.getenv("ELAB_TEST_CATEGORY")
-        requested_status = os.getenv("ELAB_TEST_STATUS")
+        cls.category_name = next(iter(categories))
+        print(f"[setup] Using first available category: {cls.category_name}")
 
-        if requested_category:
-            if requested_category not in categories:
-                raise AssertionError(
-                    f"ELAB_TEST_CATEGORY '{requested_category}' does not exist."
-                )
-            cls.category_name = requested_category
-            print(f"[setup] Using requested category: {cls.category_name}")
-        else:
-            cls.category_name = next(iter(categories))
-            print(f"[setup] Using first available category: {cls.category_name}")
-
-        if requested_status:
-            if requested_status not in statuses:
-                raise AssertionError(
-                    f"ELAB_TEST_STATUS '{requested_status}' does not exist."
-                )
-            cls.status_name = requested_status
-            print(f"[setup] Using requested status: {cls.status_name}")
-        else:
-            cls.status_name = next(iter(statuses))
-            print(f"[setup] Using first available status: {cls.status_name}")
+        cls.status_name = next(iter(statuses))
+        print(f"[setup] Using first available status: {cls.status_name}")
 
         print("[setup] Creating experiment...")
         cls.exp = cls.client.create_experiment(

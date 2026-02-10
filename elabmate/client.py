@@ -8,7 +8,6 @@ and templates.
 @author Thibaut Jacqmin
 """
 
-import os
 import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -33,12 +32,13 @@ class ElabClient:
     the API objects required to manage experiments and related entities.
     """
 
-    def __init__(self, config_path: str = "elab_server.conf"):
+    def __init__(self, config_path: str = "elabmate.conf"):
         """Initialize the client and underlying API objects.
 
         Args:
-            config_path: Path to the `elab_server.conf` configuration file.
+            config_path: Path to the `elabmate.conf` configuration file.
         """
+        self.config_path = config_path
         # Read and parse configuration file
         self.config = self._read_configuration_file(config_path)
 
@@ -205,7 +205,7 @@ class ElabClient:
         if self._team_id is not None:
             return self._team_id
 
-        raw = self.config.get("TEAM_ID") or os.getenv("ELAB_TEAM_ID")
+        raw = self.config.get("TEAM_ID")
         if raw:
             try:
                 self._team_id = int(raw)
@@ -218,7 +218,7 @@ class ElabClient:
         except Exception as exc:
             raise RuntimeError(
                 "TEAM_ID is not set and the team could not be resolved. "
-                "Set TEAM_ID in elab_server.conf or ELAB_TEAM_ID in the environment."
+                "Set TEAM_ID in elabmate.conf."
             ) from exc
 
         team_id = None
@@ -229,10 +229,14 @@ class ElabClient:
         if team_id is None:
             raise RuntimeError(
                 "Unable to determine team ID. "
-                "Set TEAM_ID in elab_server.conf or ELAB_TEAM_ID in the environment."
+                "Set TEAM_ID in elabmate.conf."
             )
         self._team_id = int(team_id)
         return self._team_id
+
+    def get_labmate_data_dir(self, default: str = "labmate_data") -> str:
+        """Return the Labmate data directory from config or a default."""
+        return self.config.get("LABMATE_DATA_DIR") or default
 
     def _get_template_id(self, name: str) -> Optional[int]:
         """Resolve an experiment template by name to its ID."""
