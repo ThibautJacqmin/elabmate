@@ -22,16 +22,16 @@ Create a configuration file (default: `elab_server.conf`) with one `KEY=VALUE`
 per line:
 
 ```ini
-API_HOST_URL=https://eln.example.org/api/v2
+API_HOST_URL=https://your_elab_server_address/api/v2
 API_KEY=your_api_key
-VERIFY_SSL=true
+VERIFY_SSL=false
 UNIQUE_EXPERIMENTS_TITLES=true
 TEAM_ID=1
 ```
 
 Notes:
 - `TEAM_ID` is optional; when absent, the client tries to resolve it from the API.
-- `VERIFY_SSL` accepts `true` or `false`.
+- `VERIFY_SSL` accepts `true` or `false`, depending on how you configured the server
 
 ## Quickstart
 
