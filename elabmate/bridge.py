@@ -13,7 +13,7 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 import time
 
-from Exceptions import DuplicateTitle
+from .exceptions import DuplicateTitle
 
 try:  # pragma: no cover - fallback for optional labmate dependency
     from labmate.acquisition.backend import AcquisitionBackend  # type: ignore
@@ -28,7 +28,7 @@ except ModuleNotFoundError:  # pragma: no cover - labmate optional during tests
             """Compatibility no-op."""
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from ElabExperiment import ElabExperiment
+    from .experiment import ElabExperiment
     from labmate.acquisition.acquisition_data import NotebookAcquisitionData
 
 

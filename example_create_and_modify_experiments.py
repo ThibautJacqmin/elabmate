@@ -8,7 +8,7 @@ Created on Tue Apr 15 18:05:23 2025
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ElabClient import ElabClient
+from elabmate import ElabClient
 
 # Step 0: Generate an API key in ElabFTW and fill `elab_server.conf`.
 # You can also pass an absolute path instead of this default.

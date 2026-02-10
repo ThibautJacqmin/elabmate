@@ -11,8 +11,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 import elabapi_python as ep
 from functools import wraps
-from ElabExperiment import ElabExperiment
-from Exceptions import InvalidTemplate, InvalidTitle, InvalidID, DuplicateTitle, InvalidCategory
+from .experiment import ElabExperiment
+from .exceptions import InvalidTemplate, InvalidTitle, InvalidID, DuplicateTitle, InvalidCategory
 from typing import Optional, Union
 
 class ElabClient:

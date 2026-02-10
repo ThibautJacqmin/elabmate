@@ -9,8 +9,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ElabClient import ElabClient
-from Exceptions import InvalidCategory, InvalidStatus
+from elabmate import ElabClient
+from elabmate import InvalidCategory, InvalidStatus
 
 
 path_to_conf_file = 'C:/Users/ThibautJacqmin/Documents/Lkb/Elab API key'

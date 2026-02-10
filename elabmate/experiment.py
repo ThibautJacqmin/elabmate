@@ -5,7 +5,7 @@ Created on Wed Apr 16 15:31:59 2025
 @author: ThibautJacqmin
 """
 
-from Exceptions import InvalidStatus, InvalidCategory, InvalidTag, DeletedExperiment
+from .exceptions import InvalidStatus, InvalidCategory, InvalidTag, DeletedExperiment
 import hashlib
 from pathlib import Path
 from typing import Any, Optional
